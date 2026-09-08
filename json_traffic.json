@@ -1,0 +1,20 @@
+{
+  "url": "https://chatgpt.com/ces/v1/p",
+  "response": "{\"success\":true}"
+}
+{
+  "url": "https://chatgpt.com/backend-api/accounts/bb44baa3-4f02-478e-a3cb-6d2f6e37d640/remaining_balance",
+  "response": "{\"balance\":\"0\",\"expiring_balance_details\":[]}"
+}
+{
+  "url": "https://chatgpt.com/ces/v1/rgstr?k=client-nb0qtYlZuy2tCMN5s5ncnuIBCJncjRViT0IzFm7GqST&st=javascript-client&sv=3.33.1&t=1788883547041&sid=a14ba523-559b-4598-b107-0f9437db7573&ec=4&gz=1",
+  "response": "{\"success\":true}"
+}
+{
+  "url": "https://chatgpt.com/ces/v1/m",
+  "response": "{\"success\":true}"
+}
+{
+  "url": "https://chatgpt.com/ces/statsc/flush",
+  "response": "{\"success\":true}"
+}
