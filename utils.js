@@ -30,5 +30,42 @@ export function calculatePercentLeft(usedPercent) {
   if (Number.isNaN(used)) {
     return 0;
   }
-  return Math.round(100 - used);
+  return Math.max(0, Math.min(100, Math.round(100 - used)));
+}
+
+/**
+ * Status colors:
+ * > 30% left: green
+ * 15% - 30% left: yellow
+ * < 15% left: red
+ */
+export const STATUS_COLORS = {
+  GREEN: "#10a37f",
+  YELLOW: "#f59e0b",
+  RED: "#ef4444"
+};
+
+/**
+ * Returns status level ('green' | 'yellow' | 'red') for a remaining percentage.
+ *
+ * @param {number} percentLeft
+ * @returns {'green' | 'yellow' | 'red'}
+ */
+export function getStatusLevel(percentLeft) {
+  if (percentLeft < 15) return 'red';
+  if (percentLeft <= 30) return 'yellow';
+  return 'green';
+}
+
+/**
+ * Combines two status levels and returns the worst ('red' > 'yellow' > 'green').
+ *
+ * @param {'green' | 'yellow' | 'red'} level1
+ * @param {'green' | 'yellow' | 'red'} level2
+ * @returns {'green' | 'yellow' | 'red'}
+ */
+export function getWorstStatus(level1, level2) {
+  if (level1 === 'red' || level2 === 'red') return 'red';
+  if (level1 === 'yellow' || level2 === 'yellow') return 'yellow';
+  return 'green';
 }
