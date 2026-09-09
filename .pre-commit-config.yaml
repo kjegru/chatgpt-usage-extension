@@ -1,0 +1,26 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-json
+      - id: check-merge-conflict
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: syntax-check
+        name: JavaScript Syntax Check
+        entry: npm run check:syntax
+        language: system
+        pass_filenames: false
+        files: \.js$
+
+      - id: unit-tests
+        name: Extension Unit & Contract Tests
+        entry: npm test
+        language: system
+        pass_filenames: false
+        files: \.(js|html|json)$

@@ -1,16 +1,16 @@
-    export interface UsageData {
-      rate_limit: {
-        primary_window: {
-          used_percent: number;
-          limit_window_seconds: number;
-          reset_after_seconds: number;
-          reset_at: number;
-        };
-        secondary_window: {
-          used_percent: number;
-          limit_window_seconds: number;
-          reset_after_seconds: number;
-          reset_at: number;
-        };
-      };
+{
+  "rate_limit": {
+    "primary_window": {
+      "used_percent": 15,
+      "limit_window_seconds": 18000,
+      "reset_after_seconds": 3600,
+      "reset_at": 1725900000
+    },
+    "secondary_window": {
+      "used_percent": 42,
+      "limit_window_seconds": 604800,
+      "reset_after_seconds": 172800,
+      "reset_at": 1726500000
     }
+  }
+}

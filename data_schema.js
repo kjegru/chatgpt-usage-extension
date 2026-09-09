@@ -1,16 +1,20 @@
-export interface UsageData {
-  rate_limit: {
-    primary_window: {
-      used_percent: number;
-      limit_window_seconds: number;
-      reset_after_seconds: number;
-      reset_at: number;
-    };
-    secondary_window: {
-      used_percent: number;
-      limit_window_seconds: number;
-      reset_after_seconds: number;
-      reset_at: number;
-    };
-  };
-}
+/**
+ * @typedef {Object} RateLimitWindow
+ * @property {number} used_percent
+ * @property {number} limit_window_seconds
+ * @property {number} reset_after_seconds
+ * @property {number} reset_at
+ */
+
+/**
+ * @typedef {Object} RateLimit
+ * @property {RateLimitWindow} primary_window
+ * @property {RateLimitWindow} secondary_window
+ */
+
+/**
+ * @typedef {Object} UsageData
+ * @property {RateLimit} rate_limit
+ */
+
+export {};
