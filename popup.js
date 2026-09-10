@@ -1,35 +1,9 @@
-function calculatePercentLeft(usedPercent) {
-  const used = typeof usedPercent === "number" ? usedPercent : Number(usedPercent);
-  if (Number.isNaN(used)) return 0;
-  return Math.max(0, Math.min(100, Math.round(100 - used)));
-}
-
-function formatResetTime(seconds) {
-  const totalSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-
-  if (days > 0) {
-    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  }
-  if (hours > 0) {
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  }
-  return `${minutes}m`;
-}
-
-function getStatusLevel(percentLeft) {
-  if (percentLeft < 15) return "red";
-  if (percentLeft <= 30) return "yellow";
-  return "green";
-}
-
-function getWorstStatus(s1, s2) {
-  if (s1 === "red" || s2 === "red") return "red";
-  if (s1 === "yellow" || s2 === "yellow") return "yellow";
-  return "green";
-}
+import {
+  calculatePercentLeft,
+  formatResetTime,
+  getStatusLevel,
+  getWorstStatus
+} from "./utils.js";
 
 function setElementStatusClass(el, status) {
   if (!el) return;
@@ -135,37 +109,40 @@ function render(rateLimit) {
 
 function refreshUsage() {
   const refreshBtn = document.getElementById("refresh-btn");
-  if (refreshBtn) refreshBtn.classList.add("spinning");
+  if (refreshBtn) {
+    if (refreshBtn.disabled) return;
+    refreshBtn.disabled = true;
+    refreshBtn.classList.add("spinning");
+  }
+
+  const finalizeUI = () => {
+    if (refreshBtn) {
+      refreshBtn.classList.remove("spinning");
+      refreshBtn.disabled = false;
+    }
+  };
 
   chrome.runtime.sendMessage({ action: "refresh_usage" }, (response) => {
-    setTimeout(() => {
-      if (refreshBtn) refreshBtn.classList.remove("spinning");
-    }, 400);
+    finalizeUI();
 
-    if (chrome.runtime.lastError) {
-      showFallback("Log into ChatGPT");
+    if (chrome.runtime.lastError || !response || !response.ok) {
+      showFallback("Log into ChatGPT or retry");
       return;
     }
 
-    if (response && (response.rate_limit || response.data?.rate_limit)) {
-      const rateLimit = response.rate_limit || response.data.rate_limit;
-      render(rateLimit);
+    if (response.payload?.rate_limit) {
+      render(response.payload.rate_limit);
       return;
     }
 
-    chrome.storage.local.get(null, (items) => {
-      const rateLimit = getRateLimitData(items);
-      if (rateLimit && (rateLimit.primary_window || rateLimit.secondary_window)) {
-        render(rateLimit);
-      } else {
-        showFallback("Log into ChatGPT");
-      }
-    });
+    loadCachedData();
   });
 }
 
+const STORAGE_KEYS = ["usagePayload", "floatingWidgetEnabled"];
+
 function loadCachedData(callback) {
-  chrome.storage.local.get(null, (result) => {
+  chrome.storage.local.get(STORAGE_KEYS, (result) => {
     if (chrome.runtime.lastError || !result) {
       if (callback) callback(false);
       return;

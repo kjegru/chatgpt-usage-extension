@@ -1,3 +1,11 @@
+import {
+  calculatePercentLeft,
+  getStatusLevel,
+  getWorstStatus,
+  STATUS_COLORS,
+  formatBadgeText,
+} from "./utils.js";
+
 /* ─── constants ────────────────────────────────────────────────── */
 
 const ALARM_NAME = "refresh-usage";
@@ -6,50 +14,10 @@ const ALARM_PERIOD_MINUTES = 5;
 const SESSION_URL = "https://chatgpt.com/api/auth/session";
 const USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 
-const STATUS_COLORS = {
-  green: "#2e7d32",
-  yellow: "#d97706",
-  red: "#dc2626",
-};
-
 let badgeCycleTimer = null;
 let currentCycleIndex = 0; // 0 for 5h, 1 for weekly
-
-/* ─── helpers ──────────────────────────────────────────────────── */
-
-/**
- * Returns remaining percentage rounded to a whole number (100 − usedPercent).
- *
- * @param {number} usedPercent
- * @returns {number}
- */
-function calculatePercentLeft(usedPercent) {
-  const used =
-    typeof usedPercent === "number" ? usedPercent : Number(usedPercent);
-  if (Number.isNaN(used)) return 0;
-  return Math.max(0, Math.min(100, Math.round(100 - used)));
-}
-
-/**
- * Returns status level ('green' | 'yellow' | 'red') for a remaining percentage.
- *
- * @param {number} percentLeft
- * @returns {'green' | 'yellow' | 'red'}
- */
-function getStatusLevel(percentLeft) {
-  if (percentLeft < 15) return "red";
-  if (percentLeft <= 30) return "yellow";
-  return "green";
-}
-
-/**
- * Returns worst status between two levels.
- */
-function getWorstStatus(s1, s2) {
-  if (s1 === "red" || s2 === "red") return "red";
-  if (s1 === "yellow" || s2 === "yellow") return "yellow";
-  return "green";
-}
+let cachedPayload = null;
+let refreshInFlight = null;
 
 /* ─── core logic ───────────────────────────────────────────────── */
 
@@ -101,86 +69,76 @@ async function fetchUsageData(accessToken) {
 }
 
 /**
- * Formats badge text for a given prefix and percent.
- * Maximum badge text length is typically 4 characters.
- * e.g., '5:87' or 'w:65'. If 100%, '5:99' or '5:100' -> '5:99' / '5MAX' / '5100'
+ * Renders the badge and action title based on the given usage payload.
+ *
+ * @param {object|null} payload
  */
-function formatBadgeText(prefix, percent) {
-  if (percent >= 100) return `${prefix}100`;
-  return `${prefix}:${percent}`;
-}
+function renderBadge(payload) {
+  if (!payload?.rate_limit) return;
+  const primary = payload.rate_limit.primary_window;
+  const secondary = payload.rate_limit.secondary_window;
 
-/**
- * Updates badge display based on stored usage payload.
- */
-async function updateBadgeFromStorage() {
-  try {
-    const data = await chrome.storage.local.get(["usagePayload"]);
-    const payload = data?.usagePayload;
-    if (!payload?.rate_limit) {
-      return;
-    }
+  const primaryLeft =
+    primary && typeof primary.used_percent === "number"
+      ? calculatePercentLeft(primary.used_percent)
+      : null;
+  const secondaryLeft =
+    secondary && typeof secondary.used_percent === "number"
+      ? calculatePercentLeft(secondary.used_percent)
+      : null;
 
-    const primary = payload.rate_limit.primary_window;
-    const secondary = payload.rate_limit.secondary_window;
+  if (primaryLeft === null && secondaryLeft === null) return;
 
-    const primaryLeft =
-      primary && typeof primary.used_percent === "number"
-        ? calculatePercentLeft(primary.used_percent)
-        : null;
+  const worst = getWorstStatus(
+    primaryLeft !== null ? getStatusLevel(primaryLeft) : "green",
+    secondaryLeft !== null ? getStatusLevel(secondaryLeft) : "green"
+  );
+  const color = STATUS_COLORS[worst.toUpperCase()] || STATUS_COLORS.GREEN;
 
-    const secondaryLeft =
-      secondary && typeof secondary.used_percent === "number"
-        ? calculatePercentLeft(secondary.used_percent)
-        : null;
-
-    if (primaryLeft === null && secondaryLeft === null) {
-      return;
-    }
-
-    // Determine status color based on worst-case
-    const statusPrimary = primaryLeft !== null ? getStatusLevel(primaryLeft) : "green";
-    const statusSecondary = secondaryLeft !== null ? getStatusLevel(secondaryLeft) : "green";
-    const worst = getWorstStatus(statusPrimary, statusSecondary);
-    const color = STATUS_COLORS[worst] || STATUS_COLORS.green;
-
-    // Determine which limit to show on current cycle
-    let text = "";
-    if (primaryLeft !== null && secondaryLeft !== null) {
-      if (currentCycleIndex === 0) {
-        text = formatBadgeText("5", primaryLeft);
-      } else {
-        text = formatBadgeText("w", secondaryLeft);
-      }
-    } else if (primaryLeft !== null) {
-      text = formatBadgeText("5", primaryLeft);
-    } else if (secondaryLeft !== null) {
-      text = formatBadgeText("w", secondaryLeft);
-    }
-
-    chrome.action.setBadgeText({ text });
-    chrome.action.setBadgeBackgroundColor({ color });
-
-    // Set tooltip / action title for quick hover view
-    const titleParts = [];
-    if (primaryLeft !== null) titleParts.push(`5h: ${primaryLeft}% left`);
-    if (secondaryLeft !== null) titleParts.push(`Weekly: ${secondaryLeft}% left`);
-    chrome.action.setTitle({
-      title: `ChatGPT Usage Limits\n${titleParts.join("\n")}`,
-    });
-  } catch (e) {
-    console.warn("[chatgpt-usage] updateBadge error:", e);
+  let text = "";
+  if (primaryLeft !== null && secondaryLeft !== null) {
+    text =
+      currentCycleIndex === 0
+        ? formatBadgeText("5", primaryLeft)
+        : formatBadgeText("w", secondaryLeft);
+  } else if (primaryLeft !== null) {
+    text = formatBadgeText("5", primaryLeft);
+  } else if (secondaryLeft !== null) {
+    text = formatBadgeText("w", secondaryLeft);
   }
+
+  chrome.action.setBadgeText({ text });
+  chrome.action.setBadgeBackgroundColor({ color });
+
+  const titleParts = [];
+  if (primaryLeft !== null) titleParts.push(`5h: ${primaryLeft}% left`);
+  if (secondaryLeft !== null) titleParts.push(`Weekly: ${secondaryLeft}% left`);
+  chrome.action.setTitle({
+    title: `ChatGPT Usage Limits\n${titleParts.join("\n")}`,
+  });
 }
 
 /**
- * Starts badge cycling timer.
+ * Synchronizes cached payload from storage and renders badge.
+ */
+async function syncBadge() {
+  if (!cachedPayload) {
+    const data = await chrome.storage.local.get(["usagePayload"]);
+    cachedPayload = data?.usagePayload || null;
+  }
+  renderBadge(cachedPayload);
+}
+
+/**
+ * Starts badge cycling timer using in-memory cached payload.
  */
 function startBadgeCycleTimer() {
   if (badgeCycleTimer) clearInterval(badgeCycleTimer);
   badgeCycleTimer = setInterval(() => {
     currentCycleIndex = (currentCycleIndex + 1) % 2;
-    updateBadgeFromStorage();
+    if (cachedPayload) {
+      renderBadge(cachedPayload);
+    }
   }, 3500);
 }
 
@@ -189,33 +147,49 @@ function startBadgeCycleTimer() {
  */
 function setBadgeError() {
   chrome.action.setBadgeText({ text: "!" });
-  chrome.action.setBadgeBackgroundColor({ color: STATUS_COLORS.red });
+  chrome.action.setBadgeBackgroundColor({ color: STATUS_COLORS.RED });
   chrome.action.setTitle({ title: "ChatGPT Usage: Log in or refresh failed" });
 }
 
 /**
- * Main refresh routine: authenticate → fetch usage → persist → update badge.
+ * Main refresh routine: authenticate -> fetch usage -> persist -> update badge.
+ * Includes in-flight mutex to avoid duplicate concurrent calls.
+ *
+ * @returns {Promise<{ ok: boolean, payload?: object, error?: string }>}
  */
 async function refreshUsage() {
-  try {
-    const accessToken = await fetchAccessToken();
-    const payload = await fetchUsageData(accessToken);
-
-    const primary = payload?.rate_limit?.primary_window;
-    if (!primary || typeof primary.used_percent !== "number") {
-      throw new Error("unexpected-payload");
-    }
-
-    await chrome.storage.local.set({
-      usagePayload: payload,
-      lastUpdated: Date.now(),
-    });
-
-    await updateBadgeFromStorage();
-  } catch (err) {
-    console.warn("[chatgpt-usage] refresh failed:", err.message);
-    setBadgeError();
+  if (refreshInFlight) {
+    return refreshInFlight;
   }
+
+  refreshInFlight = (async () => {
+    try {
+      const accessToken = await fetchAccessToken();
+      const payload = await fetchUsageData(accessToken);
+
+      const primary = payload?.rate_limit?.primary_window;
+      if (!primary || typeof primary.used_percent !== "number") {
+        throw new Error("unexpected-payload");
+      }
+
+      cachedPayload = payload;
+      await chrome.storage.local.set({
+        usagePayload: payload,
+        lastUpdated: Date.now(),
+      });
+
+      renderBadge(cachedPayload);
+      return { ok: true, payload };
+    } catch (err) {
+      console.warn("[chatgpt-usage] refresh failed:", err.message);
+      setBadgeError();
+      return { ok: false, error: err.message };
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 }
 
 /* ─── alarms ───────────────────────────────────────────────────── */
@@ -238,30 +212,28 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onInstalled.addListener(() => {
   ensureAlarm();
   refreshUsage();
-  startBadgeCycleTimer();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   ensureAlarm();
   refreshUsage();
-  startBadgeCycleTimer();
 });
 
 // Run cycle timer on worker awake
 startBadgeCycleTimer();
-updateBadgeFromStorage();
+syncBadge();
 
 /* ─── message handling ─────────────────────────────────────────── */
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.action === "refresh" || message?.action === "refresh_usage") {
-    refreshUsage().then(() => sendResponse({ ok: true }));
-    return true; // keep message channel open for async response
-  }
-});
-
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local" && changes.usagePayload) {
-    updateBadgeFromStorage();
+    refreshUsage().then((result) => {
+      try {
+        sendResponse(result);
+      } catch (_) {
+        // Channel closed by sender before response arrived
+      }
+    });
+    return true; // Keep message channel open for async response
   }
 });

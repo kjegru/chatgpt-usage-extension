@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { calculatePercentLeft, formatResetTime, getStatusLevel } from "../utils.js";
+import { calculatePercentLeft, formatResetTime, getStatusLevel, formatBadgeText } from "../utils.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -48,11 +48,6 @@ test("payload: handles partial / degraded API payloads gracefully", () => {
 });
 
 test("badge text formatting: stays within Chrome's 4-character badge limit", () => {
-  function formatBadgeText(prefix, percent) {
-    if (percent >= 100) return `${prefix}100`;
-    return `${prefix}:${percent}`;
-  }
-
   assert.equal(formatBadgeText("5", 87), "5:87");
   assert.ok(formatBadgeText("5", 87).length <= 4);
 

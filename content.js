@@ -37,10 +37,43 @@
 
   let widgetEl = null;
   let isMinimized = false;
+  let cachedPayload = null;
+
+  function updateHeaderTitle() {
+    if (!widgetEl) return;
+    const headerTitle = widgetEl.querySelector("#cgu-header-title");
+    if (!headerTitle) return;
+
+    if (!isMinimized || !cachedPayload?.rate_limit) {
+      headerTitle.textContent = "Usage Limits";
+      return;
+    }
+
+    const primary = cachedPayload.rate_limit.primary_window;
+    const secondary = cachedPayload.rate_limit.secondary_window;
+    const pText = primary && typeof primary.used_percent === "number"
+      ? `${calculatePercentLeft(primary.used_percent)}%`
+      : "--";
+    const sText = secondary && typeof secondary.used_percent === "number"
+      ? `${calculatePercentLeft(secondary.used_percent)}%`
+      : "--";
+
+    headerTitle.textContent = `5: ${pText} | W: ${sText}`;
+  }
+
+  function toggleMinimize() {
+    isMinimized = !isMinimized;
+    if (widgetEl) {
+      widgetEl.classList.toggle("cgu-minimized", isMinimized);
+    }
+    updateHeaderTitle();
+    chrome.storage.local.set({ floatingWidgetMinimized: isMinimized });
+  }
 
   function createWidget() {
-    if (document.getElementById("chatgpt-usage-floating-widget")) {
-      return document.getElementById("chatgpt-usage-floating-widget");
+    const existing = document.getElementById("chatgpt-usage-floating-widget");
+    if (existing) {
+      return existing;
     }
 
     const container = document.createElement("div");
@@ -88,21 +121,23 @@
       </div>
     `;
 
-    document.body.appendChild(container);
+    const targetParent = document.body || document.documentElement;
+    targetParent.appendChild(container);
 
     const toggleBtn = container.querySelector("#cgu-minimize-btn");
     const toggleHeader = container.querySelector("#cgu-toggle-header");
-
-    const toggleMinimize = () => {
-      isMinimized = !isMinimized;
-      container.classList.toggle("cgu-minimized", isMinimized);
-      chrome.storage.local.set({ floatingWidgetMinimized: isMinimized });
-    };
 
     if (toggleBtn) toggleBtn.addEventListener("click", toggleMinimize);
     if (toggleHeader) toggleHeader.addEventListener("click", toggleMinimize);
 
     return container;
+  }
+
+  function getWidget() {
+    if (!widgetEl || !document.contains(widgetEl)) {
+      widgetEl = createWidget();
+    }
+    return widgetEl;
   }
 
   function setElementStatusClass(el, status) {
@@ -112,7 +147,8 @@
   }
 
   function renderUsage(payload) {
-    if (!widgetEl) widgetEl = createWidget();
+    cachedPayload = payload;
+    widgetEl = getWidget();
 
     const rateLimit = payload?.rate_limit;
     if (!rateLimit) return;
@@ -167,19 +203,11 @@
       setElementStatusClass(dot, worst);
     }
 
-    // Minimized header title displays quick summary
-    const headerTitle = widgetEl.querySelector("#cgu-header-title");
-    if (headerTitle) {
-      if (isMinimized) {
-        headerTitle.textContent = `5: ${primaryLeftText} | W: ${secondaryLeftText}`;
-      } else {
-        headerTitle.textContent = "Usage Limits";
-      }
-    }
+    updateHeaderTitle();
   }
 
   function updateWidgetVisibility(enabled) {
-    if (!widgetEl) widgetEl = createWidget();
+    widgetEl = getWidget();
     widgetEl.style.display = enabled ? "block" : "none";
   }
 
@@ -189,7 +217,7 @@
       (res) => {
         if (chrome.runtime.lastError) return;
 
-        widgetEl = createWidget();
+        widgetEl = getWidget();
 
         if (res.floatingWidgetMinimized) {
           isMinimized = true;
@@ -201,6 +229,8 @@
 
         if (res.usagePayload) {
           renderUsage(res.usagePayload);
+        } else {
+          updateHeaderTitle();
         }
       }
     );
@@ -218,6 +248,7 @@
           if (widgetEl) {
             widgetEl.classList.toggle("cgu-minimized", isMinimized);
           }
+          updateHeaderTitle();
         }
       }
     });

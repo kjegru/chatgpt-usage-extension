@@ -20,6 +20,19 @@ export function formatResetTime(seconds) {
 }
 
 /**
+ * Formats badge text to strictly stay within 4 characters.
+ *
+ * @param {string} prefix
+ * @param {number} percent
+ * @returns {string}
+ */
+export function formatBadgeText(prefix, percent) {
+  const p = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  if (p >= 100) return `${prefix}100`;
+  return `${prefix}:${p}`;
+}
+
+/**
  * Returns remaining percentage rounded to whole number (100 - usedPercent).
  *
  * @param {number} usedPercent
