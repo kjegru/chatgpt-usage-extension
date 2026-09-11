@@ -18,6 +18,7 @@ let badgeCycleTimer = null;
 let currentCycleIndex = 0; // 0 for 5h, 1 for weekly
 let cachedPayload = null;
 let refreshInFlight = null;
+let badgeTextEnabled = true;
 
 /* ─── core logic ───────────────────────────────────────────────── */
 
@@ -95,48 +96,74 @@ function renderBadge(payload) {
   );
   const color = STATUS_COLORS[worst.toUpperCase()] || STATUS_COLORS.GREEN;
 
-  let text = "";
-  if (primaryLeft !== null && secondaryLeft !== null) {
-    text =
-      currentCycleIndex === 0
-        ? formatBadgeText("5", primaryLeft)
-        : formatBadgeText("w", secondaryLeft);
-  } else if (primaryLeft !== null) {
-    text = formatBadgeText("5", primaryLeft);
-  } else if (secondaryLeft !== null) {
-    text = formatBadgeText("w", secondaryLeft);
-  }
-
-  chrome.action.setBadgeText({ text });
-  chrome.action.setBadgeBackgroundColor({ color });
-
   const titleParts = [];
   if (primaryLeft !== null) titleParts.push(`5h: ${primaryLeft}% left`);
   if (secondaryLeft !== null) titleParts.push(`Weekly: ${secondaryLeft}% left`);
   chrome.action.setTitle({
     title: `ChatGPT Usage Limits\n${titleParts.join("\n")}`,
   });
+
+  if (!badgeTextEnabled) {
+    chrome.action.setBadgeText({ text: "" });
+    return;
+  }
+
+  let text = "";
+  if (primaryLeft !== null && secondaryLeft !== null) {
+    text =
+      currentCycleIndex === 0
+        ? formatBadgeText(primaryLeft)
+        : formatBadgeText(secondaryLeft);
+  } else if (primaryLeft !== null) {
+    text = formatBadgeText(primaryLeft);
+  } else if (secondaryLeft !== null) {
+    text = formatBadgeText(secondaryLeft);
+  }
+
+  chrome.action.setBadgeText({ text });
+  chrome.action.setBadgeBackgroundColor({ color });
+  if (chrome.action.setBadgeTextColor) {
+    chrome.action.setBadgeTextColor({ color: "#ffffff" });
+  }
 }
 
 /**
  * Synchronizes cached payload from storage and renders badge.
  */
 async function syncBadge() {
-  if (!cachedPayload) {
-    const data = await chrome.storage.local.get(["usagePayload"]);
-    cachedPayload = data?.usagePayload || null;
+  const data = await chrome.storage.local.get(["usagePayload", "badgeTextEnabled"]);
+  if (data?.usagePayload) {
+    cachedPayload = data.usagePayload;
   }
-  renderBadge(cachedPayload);
+  badgeTextEnabled = data?.badgeTextEnabled !== false;
+  if (!badgeTextEnabled) {
+    stopBadgeCycleTimer();
+    chrome.action.setBadgeText({ text: "" });
+  } else {
+    renderBadge(cachedPayload);
+    startBadgeCycleTimer();
+  }
+}
+
+/**
+ * Stops badge cycling timer if active.
+ */
+function stopBadgeCycleTimer() {
+  if (badgeCycleTimer) {
+    clearInterval(badgeCycleTimer);
+    badgeCycleTimer = null;
+  }
 }
 
 /**
  * Starts badge cycling timer using in-memory cached payload.
  */
 function startBadgeCycleTimer() {
-  if (badgeCycleTimer) clearInterval(badgeCycleTimer);
+  stopBadgeCycleTimer();
+  if (!badgeTextEnabled) return;
   badgeCycleTimer = setInterval(() => {
     currentCycleIndex = (currentCycleIndex + 1) % 2;
-    if (cachedPayload) {
+    if (cachedPayload && badgeTextEnabled) {
       renderBadge(cachedPayload);
     }
   }, 3500);
@@ -146,8 +173,15 @@ function startBadgeCycleTimer() {
  * Clears or marks the badge to indicate an error state.
  */
 function setBadgeError() {
-  chrome.action.setBadgeText({ text: "!" });
-  chrome.action.setBadgeBackgroundColor({ color: STATUS_COLORS.RED });
+  if (badgeTextEnabled) {
+    chrome.action.setBadgeText({ text: "!" });
+    chrome.action.setBadgeBackgroundColor({ color: STATUS_COLORS.RED });
+    if (chrome.action.setBadgeTextColor) {
+      chrome.action.setBadgeTextColor({ color: "#ffffff" });
+    }
+  } else {
+    chrome.action.setBadgeText({ text: "" });
+  }
   chrome.action.setTitle({ title: "ChatGPT Usage: Log in or refresh failed" });
 }
 
@@ -222,6 +256,29 @@ chrome.runtime.onStartup.addListener(() => {
 // Run cycle timer on worker awake
 startBadgeCycleTimer();
 syncBadge();
+
+/* ─── storage change listener ──────────────────────────────────── */
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local") {
+    if (changes.badgeTextEnabled) {
+      badgeTextEnabled = changes.badgeTextEnabled.newValue !== false;
+      if (!badgeTextEnabled) {
+        stopBadgeCycleTimer();
+        chrome.action.setBadgeText({ text: "" });
+      } else {
+        renderBadge(cachedPayload);
+        startBadgeCycleTimer();
+      }
+    }
+    if (changes.usagePayload) {
+      cachedPayload = changes.usagePayload.newValue || null;
+      if (badgeTextEnabled) {
+        renderBadge(cachedPayload);
+      }
+    }
+  }
+});
 
 /* ─── message handling ─────────────────────────────────────────── */
 

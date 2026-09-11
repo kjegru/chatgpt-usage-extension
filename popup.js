@@ -139,7 +139,7 @@ function refreshUsage() {
   });
 }
 
-const STORAGE_KEYS = ["usagePayload", "floatingWidgetEnabled"];
+const STORAGE_KEYS = ["usagePayload", "floatingWidgetEnabled", "badgeTextEnabled"];
 
 function loadCachedData(callback) {
   chrome.storage.local.get(STORAGE_KEYS, (result) => {
@@ -152,6 +152,12 @@ function loadCachedData(callback) {
     const toggleFloating = document.getElementById("toggle-floating");
     if (toggleFloating) {
       toggleFloating.checked = result.floatingWidgetEnabled !== false;
+    }
+
+    // Restore badge text toggle setting (default: true)
+    const toggleBadge = document.getElementById("toggle-badge");
+    if (toggleBadge) {
+      toggleBadge.checked = result.badgeTextEnabled !== false;
     }
 
     const rateLimit = getRateLimitData(result);
@@ -183,6 +189,13 @@ function init() {
     });
   }
 
+  const toggleBadge = document.getElementById("toggle-badge");
+  if (toggleBadge) {
+    toggleBadge.addEventListener("change", (e) => {
+      chrome.storage.local.set({ badgeTextEnabled: e.target.checked });
+    });
+  }
+
   if (chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName === "local") {
@@ -191,6 +204,9 @@ function init() {
         }
         if (changes.floatingWidgetEnabled && toggleFloating) {
           toggleFloating.checked = changes.floatingWidgetEnabled.newValue !== false;
+        }
+        if (changes.badgeTextEnabled && toggleBadge) {
+          toggleBadge.checked = changes.badgeTextEnabled.newValue !== false;
         }
       }
     });

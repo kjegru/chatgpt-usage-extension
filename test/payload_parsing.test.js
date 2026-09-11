@@ -48,12 +48,21 @@ test("payload: handles partial / degraded API payloads gracefully", () => {
 });
 
 test("badge text formatting: stays within Chrome's 4-character badge limit", () => {
-  assert.equal(formatBadgeText("5", 87), "5:87");
+  assert.equal(formatBadgeText(87), "87%");
+  assert.ok(formatBadgeText(87).length <= 4);
+
+  assert.equal(formatBadgeText(5), "5%");
+  assert.ok(formatBadgeText(5).length <= 4);
+
+  assert.equal(formatBadgeText(100), "100%");
+  assert.ok(formatBadgeText(100).length <= 4);
+
+  assert.equal(formatBadgeText("5", 87), "87%");
   assert.ok(formatBadgeText("5", 87).length <= 4);
 
-  assert.equal(formatBadgeText("w", 5), "w:5");
+  assert.equal(formatBadgeText("w", 5), "5%");
   assert.ok(formatBadgeText("w", 5).length <= 4);
 
-  assert.equal(formatBadgeText("5", 100), "5100");
+  assert.equal(formatBadgeText("5", 100), "100%");
   assert.ok(formatBadgeText("5", 100).length <= 4);
 });

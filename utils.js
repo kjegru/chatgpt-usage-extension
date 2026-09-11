@@ -26,10 +26,10 @@ export function formatResetTime(seconds) {
  * @param {number} percent
  * @returns {string}
  */
-export function formatBadgeText(prefix, percent) {
+export function formatBadgeText(arg1, arg2) {
+  const percent = arg2 !== undefined ? arg2 : arg1;
   const p = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
-  if (p >= 100) return `${prefix}100`;
-  return `${prefix}:${p}`;
+  return `${p}%`;
 }
 
 /**
