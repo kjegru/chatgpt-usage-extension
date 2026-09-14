@@ -48,6 +48,8 @@ test("content.js: widget template contains all expected control and meter IDs", 
     "cgu-toggle-header",
     "cgu-status-dot",
     "cgu-header-title",
+    "cgu-zoom-out-btn",
+    "cgu-zoom-in-btn",
     "cgu-minimize-btn",
     "cgu-val-5h",
     "cgu-bar-5h",
@@ -60,4 +62,31 @@ test("content.js: widget template contains all expected control and meter IDs", 
   for (const id of expectedIds) {
     assert.ok(contentJs.includes(id), `content.js widget template is missing id="${id}"`);
   }
+});
+
+test("content.js: scale configuration and storage keys are present", () => {
+  const contentJs = fs.readFileSync(path.join(ROOT, "content.js"), "utf8");
+  assert.ok(contentJs.includes("SCALE_STEPS"), "content.js must define SCALE_STEPS");
+  assert.ok(contentJs.includes("floatingWidgetScaleIndex"), "content.js must reference floatingWidgetScaleIndex");
+  assert.ok(contentJs.includes("applyScale"), "content.js must define applyScale function");
+  assert.ok(contentJs.includes("changeScale"), "content.js must define changeScale function");
+});
+
+test("content.js: parses without syntax errors", () => {
+  const contentJs = fs.readFileSync(path.join(ROOT, "content.js"), "utf8");
+  assert.doesNotThrow(() => {
+    new Function(contentJs);
+  }, "content.js must parse cleanly without syntax errors");
+});
+
+test("content.js & popup.js: scale step configuration is consistent", () => {
+  const contentJs = fs.readFileSync(path.join(ROOT, "content.js"), "utf8");
+  const popupJs = fs.readFileSync(path.join(ROOT, "popup.js"), "utf8");
+
+  const contentMatch = contentJs.match(/const SCALE_STEPS = (\[.*?\]);/);
+  const popupMatch = popupJs.match(/const SCALE_STEPS = (\[.*?\]);/);
+
+  assert.ok(contentMatch, "content.js must define SCALE_STEPS array");
+  assert.ok(popupMatch, "popup.js must define SCALE_STEPS array");
+  assert.equal(contentMatch[1], popupMatch[1], "content.js and popup.js SCALE_STEPS must match");
 });

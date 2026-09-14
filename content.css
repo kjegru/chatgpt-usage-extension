@@ -12,6 +12,7 @@
   box-sizing: border-box;
   opacity: 0.95;
   transition: opacity 0.2s ease, transform 0.2s ease;
+  transform-origin: top right;
 }
 
 #chatgpt-usage-floating-widget:hover {
@@ -100,12 +101,22 @@ body.dark #chatgpt-usage-floating-widget .cgu-card {
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  min-width: 14px;
+  min-height: 14px;
   transition: opacity 0.15s ease, background 0.15s ease;
 }
 
-.cgu-icon-btn:hover {
+.cgu-icon-btn:hover:not(:disabled) {
   opacity: 1;
   background: rgba(127, 127, 127, 0.15);
+}
+
+.cgu-icon-btn:disabled {
+  opacity: 0.25 !important;
+  cursor: not-allowed;
 }
 
 .cgu-body {

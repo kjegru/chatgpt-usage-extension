@@ -70,6 +70,48 @@
     chrome.storage.local.set({ floatingWidgetMinimized: isMinimized });
   }
 
+  const SCALE_STEPS = [0.75, 0.85, 1.0, 1.15, 1.30, 1.50];
+  const DEFAULT_SCALE_INDEX = 2;
+  let scaleIndex = DEFAULT_SCALE_INDEX;
+
+  function updateScaleButtons() {
+    if (!widgetEl) return;
+    const zoomOut = widgetEl.querySelector("#cgu-zoom-out-btn");
+    const zoomIn = widgetEl.querySelector("#cgu-zoom-in-btn");
+    if (zoomOut) {
+      const atMin = scaleIndex <= 0;
+      zoomOut.disabled = atMin;
+      zoomOut.style.opacity = atMin ? "0.25" : "";
+      zoomOut.style.cursor = atMin ? "not-allowed" : "pointer";
+      zoomOut.title = atMin
+        ? "Minimum size reached"
+        : `Decrease size (${Math.round(SCALE_STEPS[scaleIndex - 1] * 100)}%)`;
+    }
+    if (zoomIn) {
+      const atMax = scaleIndex >= SCALE_STEPS.length - 1;
+      zoomIn.disabled = atMax;
+      zoomIn.style.opacity = atMax ? "0.25" : "";
+      zoomIn.style.cursor = atMax ? "not-allowed" : "pointer";
+      zoomIn.title = atMax
+        ? "Maximum size reached"
+        : `Increase size (${Math.round(SCALE_STEPS[scaleIndex + 1] * 100)}%)`;
+    }
+  }
+
+  function applyScale() {
+    if (!widgetEl) return;
+    widgetEl.style.transform = `scale(${SCALE_STEPS[scaleIndex]})`;
+    updateScaleButtons();
+  }
+
+  function changeScale(delta) {
+    const next = scaleIndex + delta;
+    if (next < 0 || next >= SCALE_STEPS.length) return;
+    scaleIndex = next;
+    applyScale();
+    chrome.storage.local.set({ floatingWidgetScaleIndex: scaleIndex });
+  }
+
   /**
    * Builds the floating widget using only safe DOM APIs (createElement, textContent, createElementNS).
    * All element text is set via .textContent; SVG via createElementNS.
@@ -108,9 +150,21 @@
     titleGroup.appendChild(statusDot);
     titleGroup.appendChild(headerTitle);
 
-    // Controls (minimize button with SVG icon)
+    // Controls (zoom out, zoom in, and minimize button)
     const controls = document.createElement("div");
     controls.className = "cgu-controls";
+
+    const zoomOutBtn = document.createElement("button");
+    zoomOutBtn.className = "cgu-icon-btn";
+    zoomOutBtn.id = "cgu-zoom-out-btn";
+    zoomOutBtn.title = "Decrease size";
+    zoomOutBtn.textContent = "−";
+
+    const zoomInBtn = document.createElement("button");
+    zoomInBtn.className = "cgu-icon-btn";
+    zoomInBtn.id = "cgu-zoom-in-btn";
+    zoomInBtn.title = "Increase size";
+    zoomInBtn.textContent = "+";
 
     const minimizeBtn = document.createElement("button");
     minimizeBtn.className = "cgu-icon-btn";
@@ -136,6 +190,8 @@
     svg.appendChild(poly2);
 
     minimizeBtn.appendChild(svg);
+    controls.appendChild(zoomOutBtn);
+    controls.appendChild(zoomInBtn);
     controls.appendChild(minimizeBtn);
 
     header.appendChild(titleGroup);
@@ -202,11 +258,24 @@
     const targetParent = document.body || document.documentElement;
     targetParent.appendChild(container);
 
-    const toggleBtn = container.querySelector("#cgu-minimize-btn");
-    const toggleHeader = container.querySelector("#cgu-toggle-header");
+    zoomOutBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      changeScale(-1);
+    });
 
-    if (toggleBtn) toggleBtn.addEventListener("click", toggleMinimize);
-    if (toggleHeader) toggleHeader.addEventListener("click", toggleMinimize);
+    zoomInBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      changeScale(1);
+    });
+
+    minimizeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleMinimize();
+    });
+
+    titleGroup.addEventListener("click", toggleMinimize);
+
+    container.style.transform = `scale(${SCALE_STEPS[scaleIndex]})`;
 
     return container;
   }
@@ -214,6 +283,7 @@
   function getWidget() {
     if (!widgetEl || !document.contains(widgetEl)) {
       widgetEl = createWidget();
+      applyScale();
     }
     return widgetEl;
   }
@@ -286,11 +356,16 @@
 
   function init() {
     chrome.storage.local.get(
-      ["usagePayload", "floatingWidgetEnabled", "floatingWidgetMinimized"],
+      ["usagePayload", "floatingWidgetEnabled", "floatingWidgetMinimized", "floatingWidgetScaleIndex"],
       (res) => {
         if (chrome.runtime.lastError) return;
 
+        if (typeof res.floatingWidgetScaleIndex === "number") {
+          scaleIndex = Math.max(0, Math.min(SCALE_STEPS.length - 1, res.floatingWidgetScaleIndex));
+        }
+
         widgetEl = getWidget();
+        applyScale();
 
         if (res.floatingWidgetMinimized) {
           isMinimized = true;
@@ -322,6 +397,13 @@
             widgetEl.classList.toggle("cgu-minimized", isMinimized);
           }
           updateHeaderTitle();
+        }
+        if (changes.floatingWidgetScaleIndex !== undefined) {
+          const idx = changes.floatingWidgetScaleIndex.newValue;
+          if (typeof idx === "number") {
+            scaleIndex = Math.max(0, Math.min(SCALE_STEPS.length - 1, idx));
+            applyScale();
+          }
         }
       }
     });
