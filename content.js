@@ -70,6 +70,10 @@
     chrome.storage.local.set({ floatingWidgetMinimized: isMinimized });
   }
 
+  /**
+   * Builds the floating widget using only safe DOM APIs (createElement, textContent, createElementNS).
+   * All element text is set via .textContent; SVG via createElementNS.
+   */
   function createWidget() {
     const existing = document.getElementById("chatgpt-usage-floating-widget");
     if (existing) {
@@ -79,47 +83,121 @@
     const container = document.createElement("div");
     container.id = "chatgpt-usage-floating-widget";
 
-    container.innerHTML = `
-      <div class="cgu-card">
-        <div class="cgu-header">
-          <div class="cgu-title-group" id="cgu-toggle-header">
-            <span class="cgu-status-dot cgu-green" id="cgu-status-dot"></span>
-            <span class="cgu-title" id="cgu-header-title">Usage Limits</span>
-          </div>
-          <div class="cgu-controls">
-            <button class="cgu-icon-btn" id="cgu-minimize-btn" title="Minimize / Expand">
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="4 14 10 14 10 20"></polyline>
-                <polyline points="20 10 14 10 14 4"></polyline>
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div class="cgu-body" id="cgu-body">
-          <div class="cgu-row">
-            <div class="cgu-row-meta">
-              <span class="cgu-row-label">5-hour</span>
-              <span class="cgu-row-val" id="cgu-val-5h">--% left</span>
-            </div>
-            <div class="cgu-progress-track">
-              <div class="cgu-progress-fill cgu-green" id="cgu-bar-5h" style="width: 0%;"></div>
-            </div>
-            <span class="cgu-reset-text" id="cgu-reset-5h">--</span>
-          </div>
+    // ── Card ──────────────────────────────────────────────────────
+    const card = document.createElement("div");
+    card.className = "cgu-card";
 
-          <div class="cgu-row">
-            <div class="cgu-row-meta">
-              <span class="cgu-row-label">Weekly</span>
-              <span class="cgu-row-val" id="cgu-val-weekly">--% left</span>
-            </div>
-            <div class="cgu-progress-track">
-              <div class="cgu-progress-fill cgu-green" id="cgu-bar-weekly" style="width: 0%;"></div>
-            </div>
-            <span class="cgu-reset-text" id="cgu-reset-weekly">--</span>
-          </div>
-        </div>
-      </div>
-    `;
+    // ── Header ────────────────────────────────────────────────────
+    const header = document.createElement("div");
+    header.className = "cgu-header";
+
+    // Title group (status dot + title text)
+    const titleGroup = document.createElement("div");
+    titleGroup.className = "cgu-title-group";
+    titleGroup.id = "cgu-toggle-header";
+
+    const statusDot = document.createElement("span");
+    statusDot.className = "cgu-status-dot cgu-green";
+    statusDot.id = "cgu-status-dot";
+
+    const headerTitle = document.createElement("span");
+    headerTitle.className = "cgu-title";
+    headerTitle.id = "cgu-header-title";
+    headerTitle.textContent = "Usage Limits";
+
+    titleGroup.appendChild(statusDot);
+    titleGroup.appendChild(headerTitle);
+
+    // Controls (minimize button with SVG icon)
+    const controls = document.createElement("div");
+    controls.className = "cgu-controls";
+
+    const minimizeBtn = document.createElement("button");
+    minimizeBtn.className = "cgu-icon-btn";
+    minimizeBtn.id = "cgu-minimize-btn";
+    minimizeBtn.title = "Minimize / Expand";
+
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "12");
+    svg.setAttribute("height", "12");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+
+    const poly1 = document.createElementNS(svgNS, "polyline");
+    poly1.setAttribute("points", "4 14 10 14 10 20");
+    const poly2 = document.createElementNS(svgNS, "polyline");
+    poly2.setAttribute("points", "20 10 14 10 14 4");
+    svg.appendChild(poly1);
+    svg.appendChild(poly2);
+
+    minimizeBtn.appendChild(svg);
+    controls.appendChild(minimizeBtn);
+
+    header.appendChild(titleGroup);
+    header.appendChild(controls);
+
+    // ── Body ──────────────────────────────────────────────────────
+    const body = document.createElement("div");
+    body.className = "cgu-body";
+    body.id = "cgu-body";
+
+    /**
+     * Builds a metric row (label, percentage value, progress bar, reset text).
+     * @param {string} labelText
+     * @param {string} valId
+     * @param {string} barId
+     * @param {string} resetId
+     */
+    function makeRow(labelText, valId, barId, resetId) {
+      const row = document.createElement("div");
+      row.className = "cgu-row";
+
+      const rowMeta = document.createElement("div");
+      rowMeta.className = "cgu-row-meta";
+
+      const label = document.createElement("span");
+      label.className = "cgu-row-label";
+      label.textContent = labelText;
+
+      const val = document.createElement("span");
+      val.className = "cgu-row-val";
+      val.id = valId;
+      val.textContent = "--% left";
+
+      rowMeta.appendChild(label);
+      rowMeta.appendChild(val);
+
+      const track = document.createElement("div");
+      track.className = "cgu-progress-track";
+
+      const fill = document.createElement("div");
+      fill.className = "cgu-progress-fill cgu-green";
+      fill.id = barId;
+      fill.style.width = "0%";
+      track.appendChild(fill);
+
+      const resetText = document.createElement("span");
+      resetText.className = "cgu-reset-text";
+      resetText.id = resetId;
+      resetText.textContent = "--";
+
+      row.appendChild(rowMeta);
+      row.appendChild(track);
+      row.appendChild(resetText);
+      return row;
+    }
+
+    body.appendChild(makeRow("5-hour", "cgu-val-5h", "cgu-bar-5h", "cgu-reset-5h"));
+    body.appendChild(makeRow("Weekly", "cgu-val-weekly", "cgu-bar-weekly", "cgu-reset-weekly"));
+
+    card.appendChild(header);
+    card.appendChild(body);
+    container.appendChild(card);
 
     const targetParent = document.body || document.documentElement;
     targetParent.appendChild(container);
@@ -159,13 +237,9 @@
     let primaryStatus = "green";
     let secondaryStatus = "green";
 
-    let primaryLeftText = "--";
-    let secondaryLeftText = "--";
-
     if (primary && typeof primary.used_percent === "number") {
       const pLeft = calculatePercentLeft(primary.used_percent);
       primaryStatus = getStatusLevel(pLeft);
-      primaryLeftText = `${pLeft}%`;
 
       const val5h = widgetEl.querySelector("#cgu-val-5h");
       const bar5h = widgetEl.querySelector("#cgu-bar-5h");
@@ -182,7 +256,6 @@
     if (secondary && typeof secondary.used_percent === "number") {
       const sLeft = calculatePercentLeft(secondary.used_percent);
       secondaryStatus = getStatusLevel(sLeft);
-      secondaryLeftText = `${sLeft}%`;
 
       const valWeekly = widgetEl.querySelector("#cgu-val-weekly");
       const barWeekly = widgetEl.querySelector("#cgu-bar-weekly");

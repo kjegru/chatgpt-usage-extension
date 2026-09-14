@@ -20,10 +20,17 @@ let cachedPayload = null;
 let refreshInFlight = null;
 let badgeTextEnabled = true;
 
+// Exponential backoff state: tracks consecutive failures and alarm cycles to skip
+let consecutiveFailures = 0;
+const MAX_BACKOFF_SKIPS = 5; // max alarm cycles to skip (up to 25 min gap at 5-min cadence)
+let backoffSkipsRemaining = 0;
+
 /* ─── core logic ───────────────────────────────────────────────── */
 
 /**
  * Fetches the accessToken from the ChatGPT session endpoint.
+ * The token is held in memory only for the duration of one fetchUsageData()
+ * call and is never written to storage.
  *
  * @returns {Promise<string>} accessToken
  * @throws {Error} on non-OK responses or missing token
@@ -100,7 +107,7 @@ function renderBadge(payload) {
   if (primaryLeft !== null) titleParts.push(`5h: ${primaryLeft}% left`);
   if (secondaryLeft !== null) titleParts.push(`Weekly: ${secondaryLeft}% left`);
   chrome.action.setTitle({
-    title: `ChatGPT Usage Limits\n${titleParts.join("\n")}`,
+    title: `Usage Limits Tracker for ChatGPT\n${titleParts.join("\n")}`,
   });
 
   if (!badgeTextEnabled) {
@@ -170,9 +177,12 @@ function startBadgeCycleTimer() {
 }
 
 /**
- * Clears or marks the badge to indicate an error state.
+ * Translates an error code into a user-readable message.
+ * Persists to storage so the popup can surface it.
+ *
+ * @param {string} [reason]
  */
-function setBadgeError() {
+function setBadgeError(reason) {
   if (badgeTextEnabled) {
     chrome.action.setBadgeText({ text: "!" });
     chrome.action.setBadgeBackgroundColor({ color: STATUS_COLORS.RED });
@@ -182,12 +192,24 @@ function setBadgeError() {
   } else {
     chrome.action.setBadgeText({ text: "" });
   }
-  chrome.action.setTitle({ title: "ChatGPT Usage: Log in or refresh failed" });
+  chrome.action.setTitle({ title: "Usage Limits Tracker: refresh failed" });
+
+  // Persist a user-readable error detail for the popup to display
+  let detail;
+  if (reason?.startsWith("auth/") || reason?.startsWith("usage-auth/") || reason === "no-access-token") {
+    detail = "Log in to ChatGPT, then click refresh.";
+  } else if (reason === "unexpected-payload") {
+    detail = "ChatGPT may have changed their API — an update is required.";
+  } else {
+    detail = "Refresh failed. Check your connection or try again.";
+  }
+  chrome.storage.local.set({ lastError: detail });
 }
 
 /**
  * Main refresh routine: authenticate -> fetch usage -> persist -> update badge.
  * Includes in-flight mutex to avoid duplicate concurrent calls.
+ * On success, resets backoff counters and clears any persisted error.
  *
  * @returns {Promise<{ ok: boolean, payload?: object, error?: string }>}
  */
@@ -206,17 +228,29 @@ async function refreshUsage() {
         throw new Error("unexpected-payload");
       }
 
+      // Success — reset backoff and clear any prior error
+      consecutiveFailures = 0;
+      backoffSkipsRemaining = 0;
+
       cachedPayload = payload;
       await chrome.storage.local.set({
         usagePayload: payload,
         lastUpdated: Date.now(),
+        lastError: null,
       });
 
       renderBadge(cachedPayload);
       return { ok: true, payload };
     } catch (err) {
-      console.warn("[chatgpt-usage] refresh failed:", err.message);
-      setBadgeError();
+      consecutiveFailures++;
+      // Exponential-ish backoff: skip min(failures-1, MAX) alarm cycles
+      const skips = Math.min(consecutiveFailures - 1, MAX_BACKOFF_SKIPS);
+      backoffSkipsRemaining = skips;
+      console.warn(
+        `[chatgpt-usage] refresh failed (attempt ${consecutiveFailures}, backing off ${skips} cycles):`,
+        err.message
+      );
+      setBadgeError(err.message);
       return { ok: false, error: err.message };
     } finally {
       refreshInFlight = null;
@@ -237,6 +271,11 @@ async function ensureAlarm() {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
+    if (backoffSkipsRemaining > 0) {
+      backoffSkipsRemaining--;
+      console.info(`[chatgpt-usage] skipping refresh (backoff, ${backoffSkipsRemaining} cycles remaining)`);
+      return;
+    }
     refreshUsage();
   }
 });
@@ -284,6 +323,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.action === "refresh" || message?.action === "refresh_usage") {
+    // Manual refresh always resets backoff so it runs immediately
+    backoffSkipsRemaining = 0;
     refreshUsage().then((result) => {
       try {
         sendResponse(result);
