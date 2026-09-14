@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT Usage Limits",
-  "version": "1.1.0",
-  "description": "Displays ChatGPT Business usage limits (5-hour and weekly) in the toolbar and on-page.",
+  "name": "Usage Limits Tracker for ChatGPT",
+  "version": "1.2.0",
+  "description": "Third-party tracker that displays your ChatGPT usage quota (5-hour and weekly limits) in the toolbar and on-page.",
   "permissions": [
     "storage",
     "alarms"
   ],
   "host_permissions": [
-    "https://chatgpt.com/*"
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -25,7 +26,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://chatgpt.com/*"
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
       ],
       "js": [
         "content.js"
@@ -40,5 +42,8 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
   }
 }

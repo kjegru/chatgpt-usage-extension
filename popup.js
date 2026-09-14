@@ -126,7 +126,10 @@ function refreshUsage() {
     finalizeUI();
 
     if (chrome.runtime.lastError || !response || !response.ok) {
-      showFallback("Log into ChatGPT or retry");
+      // Surface a stored error message if available, otherwise generic fallback
+      chrome.storage.local.get("lastError", ({ lastError }) => {
+        showFallback(lastError || "Log into ChatGPT or retry");
+      });
       return;
     }
 
@@ -139,7 +142,7 @@ function refreshUsage() {
   });
 }
 
-const STORAGE_KEYS = ["usagePayload", "floatingWidgetEnabled", "badgeTextEnabled"];
+const STORAGE_KEYS = ["usagePayload", "floatingWidgetEnabled", "badgeTextEnabled", "lastError"];
 
 function loadCachedData(callback) {
   chrome.storage.local.get(STORAGE_KEYS, (result) => {
@@ -158,6 +161,13 @@ function loadCachedData(callback) {
     const toggleBadge = document.getElementById("toggle-badge");
     if (toggleBadge) {
       toggleBadge.checked = result.badgeTextEnabled !== false;
+    }
+
+    // If there's a stored error and no valid usage data, show it to the user
+    if (result.lastError && !result.usagePayload) {
+      showFallback(result.lastError);
+      if (callback) callback(false);
+      return;
     }
 
     const rateLimit = getRateLimitData(result);
@@ -207,6 +217,11 @@ function init() {
         }
         if (changes.badgeTextEnabled && toggleBadge) {
           toggleBadge.checked = changes.badgeTextEnabled.newValue !== false;
+        }
+        // Surface a new error in the popup if there's no good data
+        if (changes.lastError && !changes.usagePayload) {
+          const errMsg = changes.lastError.newValue;
+          if (errMsg) showFallback(errMsg);
         }
       }
     });
