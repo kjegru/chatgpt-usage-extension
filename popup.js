@@ -242,7 +242,7 @@ function init() {
   if (scaleDecBtn) {
     scaleDecBtn.addEventListener("click", () => {
       chrome.storage.local.get(["floatingWidgetScaleIndex"], (res) => {
-        const cur = typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
+        const cur = res && typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
         const next = Math.max(0, cur - 1);
         chrome.storage.local.set({ floatingWidgetScaleIndex: next });
       });
@@ -253,7 +253,7 @@ function init() {
   if (scaleIncBtn) {
     scaleIncBtn.addEventListener("click", () => {
       chrome.storage.local.get(["floatingWidgetScaleIndex"], (res) => {
-        const cur = typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
+        const cur = res && typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
         const next = Math.min(SCALE_STEPS.length - 1, cur + 1);
         chrome.storage.local.set({ floatingWidgetScaleIndex: next });
       });
@@ -272,7 +272,7 @@ function init() {
             toggleFloating.checked = isEnabled;
           }
           chrome.storage.local.get("floatingWidgetScaleIndex", (res) => {
-            const idx = typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
+            const idx = res && typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
             updateScaleDisplay(Math.max(0, Math.min(SCALE_STEPS.length - 1, idx)), isEnabled);
           });
         }

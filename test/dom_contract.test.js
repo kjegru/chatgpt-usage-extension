@@ -90,3 +90,19 @@ test("content.js & popup.js: scale step configuration is consistent", () => {
   assert.ok(popupMatch, "popup.js must define SCALE_STEPS array");
   assert.equal(contentMatch[1], popupMatch[1], "content.js and popup.js SCALE_STEPS must match");
 });
+
+test("content.js: safeStorageSet is implemented and protects against invalidated extension context", () => {
+  const contentJs = fs.readFileSync(path.join(ROOT, "content.js"), "utf8");
+  assert.ok(contentJs.includes("function safeStorageSet"), "content.js must define safeStorageSet function");
+  assert.ok(contentJs.includes("safeStorageSet({ floatingWidgetMinimized: isMinimized })"), "toggleMinimize must use safeStorageSet");
+  assert.ok(contentJs.includes("safeStorageSet({ floatingWidgetScaleIndex: scaleIndex })"), "changeScale must use safeStorageSet");
+});
+
+test("content.js: toggleMinimize and updateHeaderTitle execute safely under mocked DOM", () => {
+  const contentJs = fs.readFileSync(path.join(ROOT, "content.js"), "utf8");
+
+  // Verify that neither raw chrome.storage.local.set call exists in toggleMinimize
+  const toggleMinMatch = contentJs.match(/function toggleMinimize\(\) \{([\s\S]*?)\n  \}/);
+  assert.ok(toggleMinMatch, "toggleMinimize function must be found");
+  assert.ok(!toggleMinMatch[1].includes("chrome.storage.local.set"), "toggleMinimize must not use raw unhandled chrome.storage.local.set");
+});

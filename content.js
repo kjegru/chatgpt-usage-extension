@@ -39,7 +39,28 @@
   let isMinimized = false;
   let cachedPayload = null;
 
+  function safeStorageSet(items) {
+    try {
+      if (typeof chrome === "undefined" || !chrome?.runtime?.id || !chrome?.storage?.local) {
+        return;
+      }
+      const p = chrome.storage.local.set(items, () => {
+        if (chrome.runtime?.lastError) {
+          // Handled to suppress unhandled lastError warnings
+        }
+      });
+      if (p && typeof p.catch === "function") {
+        p.catch(() => {});
+      }
+    } catch (_) {
+      // Extension context invalidated or storage unavailable
+    }
+  }
+
   function updateHeaderTitle() {
+    if (!widgetEl) {
+      widgetEl = document.getElementById("chatgpt-usage-floating-widget");
+    }
     if (!widgetEl) return;
     const headerTitle = widgetEl.querySelector("#cgu-header-title");
     if (!headerTitle) return;
@@ -49,25 +70,32 @@
       return;
     }
 
-    const primary = cachedPayload.rate_limit.primary_window;
-    const secondary = cachedPayload.rate_limit.secondary_window;
-    const pText = primary && typeof primary.used_percent === "number"
-      ? `${calculatePercentLeft(primary.used_percent)}%`
-      : "--";
-    const sText = secondary && typeof secondary.used_percent === "number"
-      ? `${calculatePercentLeft(secondary.used_percent)}%`
-      : "--";
+    try {
+      const primary = cachedPayload.rate_limit.primary_window;
+      const secondary = cachedPayload.rate_limit.secondary_window;
+      const pText = primary && typeof primary.used_percent === "number"
+        ? `${calculatePercentLeft(primary.used_percent)}%`
+        : "--";
+      const sText = secondary && typeof secondary.used_percent === "number"
+        ? `${calculatePercentLeft(secondary.used_percent)}%`
+        : "--";
 
-    headerTitle.textContent = `5: ${pText} | W: ${sText}`;
+      headerTitle.textContent = `5: ${pText} | W: ${sText}`;
+    } catch (_) {
+      headerTitle.textContent = "Usage Limits";
+    }
   }
 
   function toggleMinimize() {
     isMinimized = !isMinimized;
+    if (!widgetEl) {
+      widgetEl = document.getElementById("chatgpt-usage-floating-widget");
+    }
     if (widgetEl) {
       widgetEl.classList.toggle("cgu-minimized", isMinimized);
     }
     updateHeaderTitle();
-    chrome.storage.local.set({ floatingWidgetMinimized: isMinimized });
+    safeStorageSet({ floatingWidgetMinimized: isMinimized });
   }
 
   const SCALE_STEPS = [0.75, 0.85, 1.0, 1.15, 1.30, 1.50];
@@ -109,7 +137,7 @@
     if (next < 0 || next >= SCALE_STEPS.length) return;
     scaleIndex = next;
     applyScale();
-    chrome.storage.local.set({ floatingWidgetScaleIndex: scaleIndex });
+    safeStorageSet({ floatingWidgetScaleIndex: scaleIndex });
   }
 
   /**
@@ -273,7 +301,10 @@
       toggleMinimize();
     });
 
-    titleGroup.addEventListener("click", toggleMinimize);
+    titleGroup.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleMinimize();
+    });
 
     container.style.transform = `scale(${SCALE_STEPS[scaleIndex]})`;
 
@@ -355,58 +386,71 @@
   }
 
   function init() {
-    chrome.storage.local.get(
-      ["usagePayload", "floatingWidgetEnabled", "floatingWidgetMinimized", "floatingWidgetScaleIndex"],
-      (res) => {
-        if (chrome.runtime.lastError) return;
-
-        if (typeof res.floatingWidgetScaleIndex === "number") {
-          scaleIndex = Math.max(0, Math.min(SCALE_STEPS.length - 1, res.floatingWidgetScaleIndex));
-        }
-
-        widgetEl = getWidget();
-        applyScale();
-
-        if (res.floatingWidgetMinimized) {
-          isMinimized = true;
-          widgetEl.classList.add("cgu-minimized");
-        }
-
-        const enabled = res.floatingWidgetEnabled !== false;
-        updateWidgetVisibility(enabled);
-
-        if (res.usagePayload) {
-          renderUsage(res.usagePayload);
-        } else {
-          updateHeaderTitle();
-        }
+    try {
+      if (typeof chrome === "undefined" || !chrome?.runtime?.id || !chrome?.storage?.local) {
+        return;
       }
-    );
+      chrome.storage.local.get(
+        ["usagePayload", "floatingWidgetEnabled", "floatingWidgetMinimized", "floatingWidgetScaleIndex"],
+        (res) => {
+          if (chrome.runtime?.lastError || !res) return;
 
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName === "local") {
-        if (changes.usagePayload) {
-          renderUsage(changes.usagePayload.newValue);
-        }
-        if (changes.floatingWidgetEnabled !== undefined) {
-          updateWidgetVisibility(changes.floatingWidgetEnabled.newValue !== false);
-        }
-        if (changes.floatingWidgetMinimized !== undefined) {
-          isMinimized = !!changes.floatingWidgetMinimized.newValue;
-          if (widgetEl) {
-            widgetEl.classList.toggle("cgu-minimized", isMinimized);
+          if (typeof res.floatingWidgetScaleIndex === "number") {
+            scaleIndex = Math.max(0, Math.min(SCALE_STEPS.length - 1, res.floatingWidgetScaleIndex));
           }
-          updateHeaderTitle();
-        }
-        if (changes.floatingWidgetScaleIndex !== undefined) {
-          const idx = changes.floatingWidgetScaleIndex.newValue;
-          if (typeof idx === "number") {
-            scaleIndex = Math.max(0, Math.min(SCALE_STEPS.length - 1, idx));
-            applyScale();
+
+          widgetEl = getWidget();
+          applyScale();
+
+          if (res.floatingWidgetMinimized) {
+            isMinimized = true;
+            widgetEl.classList.add("cgu-minimized");
+          }
+
+          const enabled = res.floatingWidgetEnabled !== false;
+          updateWidgetVisibility(enabled);
+
+          if (res.usagePayload) {
+            renderUsage(res.usagePayload);
+          } else {
+            updateHeaderTitle();
           }
         }
+      );
+    } catch (_) {
+      // Extension context invalidated
+    }
+
+    try {
+      if (typeof chrome !== "undefined" && chrome?.storage?.onChanged) {
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+          if (areaName === "local") {
+            if (changes.usagePayload) {
+              renderUsage(changes.usagePayload.newValue);
+            }
+            if (changes.floatingWidgetEnabled !== undefined) {
+              updateWidgetVisibility(changes.floatingWidgetEnabled.newValue !== false);
+            }
+            if (changes.floatingWidgetMinimized !== undefined) {
+              isMinimized = !!changes.floatingWidgetMinimized.newValue;
+              if (widgetEl) {
+                widgetEl.classList.toggle("cgu-minimized", isMinimized);
+              }
+              updateHeaderTitle();
+            }
+            if (changes.floatingWidgetScaleIndex !== undefined) {
+              const idx = changes.floatingWidgetScaleIndex.newValue;
+              if (typeof idx === "number") {
+                scaleIndex = Math.max(0, Math.min(SCALE_STEPS.length - 1, idx));
+                applyScale();
+              }
+            }
+          }
+        });
       }
-    });
+    } catch (_) {
+      // Extension context invalidated
+    }
   }
 
   if (document.readyState === "loading") {
