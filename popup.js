@@ -142,7 +142,30 @@ function refreshUsage() {
   });
 }
 
-const STORAGE_KEYS = ["usagePayload", "floatingWidgetEnabled", "badgeTextEnabled", "lastError"];
+const SCALE_STEPS = [0.75, 0.85, 1.0, 1.15, 1.30, 1.50];
+const DEFAULT_SCALE_INDEX = 2;
+
+function updateScaleDisplay(idx, floatingEnabled = true) {
+  const label = document.getElementById("scale-value-label");
+  const decBtn = document.getElementById("scale-dec-btn");
+  const incBtn = document.getElementById("scale-inc-btn");
+  const scaleRow = document.getElementById("widget-scale-row");
+
+  if (label) {
+    label.textContent = `${Math.round(SCALE_STEPS[idx] * 100)}%`;
+  }
+  if (decBtn) {
+    decBtn.disabled = !floatingEnabled || idx <= 0;
+  }
+  if (incBtn) {
+    incBtn.disabled = !floatingEnabled || idx >= SCALE_STEPS.length - 1;
+  }
+  if (scaleRow) {
+    scaleRow.style.opacity = floatingEnabled ? "1" : "0.5";
+  }
+}
+
+const STORAGE_KEYS = ["usagePayload", "floatingWidgetEnabled", "badgeTextEnabled", "floatingWidgetScaleIndex", "lastError"];
 
 function loadCachedData(callback) {
   chrome.storage.local.get(STORAGE_KEYS, (result) => {
@@ -151,11 +174,20 @@ function loadCachedData(callback) {
       return;
     }
 
+    const floatingEnabled = result.floatingWidgetEnabled !== false;
+
     // Restore floating widget toggle setting (default: true)
     const toggleFloating = document.getElementById("toggle-floating");
     if (toggleFloating) {
-      toggleFloating.checked = result.floatingWidgetEnabled !== false;
+      toggleFloating.checked = floatingEnabled;
     }
+
+    // Restore widget scale display
+    let scaleIndex = DEFAULT_SCALE_INDEX;
+    if (typeof result.floatingWidgetScaleIndex === "number") {
+      scaleIndex = Math.max(0, Math.min(SCALE_STEPS.length - 1, result.floatingWidgetScaleIndex));
+    }
+    updateScaleDisplay(scaleIndex, floatingEnabled);
 
     // Restore badge text toggle setting (default: true)
     const toggleBadge = document.getElementById("toggle-badge");
@@ -206,14 +238,50 @@ function init() {
     });
   }
 
+  const scaleDecBtn = document.getElementById("scale-dec-btn");
+  if (scaleDecBtn) {
+    scaleDecBtn.addEventListener("click", () => {
+      chrome.storage.local.get(["floatingWidgetScaleIndex"], (res) => {
+        const cur = res && typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
+        const next = Math.max(0, cur - 1);
+        chrome.storage.local.set({ floatingWidgetScaleIndex: next });
+      });
+    });
+  }
+
+  const scaleIncBtn = document.getElementById("scale-inc-btn");
+  if (scaleIncBtn) {
+    scaleIncBtn.addEventListener("click", () => {
+      chrome.storage.local.get(["floatingWidgetScaleIndex"], (res) => {
+        const cur = res && typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
+        const next = Math.min(SCALE_STEPS.length - 1, cur + 1);
+        chrome.storage.local.set({ floatingWidgetScaleIndex: next });
+      });
+    });
+  }
+
   if (chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName === "local") {
         if (changes.usagePayload) {
           loadCachedData();
         }
-        if (changes.floatingWidgetEnabled && toggleFloating) {
-          toggleFloating.checked = changes.floatingWidgetEnabled.newValue !== false;
+        if (changes.floatingWidgetEnabled !== undefined) {
+          const isEnabled = changes.floatingWidgetEnabled.newValue !== false;
+          if (toggleFloating) {
+            toggleFloating.checked = isEnabled;
+          }
+          chrome.storage.local.get("floatingWidgetScaleIndex", (res) => {
+            const idx = res && typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
+            updateScaleDisplay(Math.max(0, Math.min(SCALE_STEPS.length - 1, idx)), isEnabled);
+          });
+        }
+        if (changes.floatingWidgetScaleIndex !== undefined) {
+          const idx = changes.floatingWidgetScaleIndex.newValue;
+          if (typeof idx === "number") {
+            const isEnabled = toggleFloating ? toggleFloating.checked : true;
+            updateScaleDisplay(Math.max(0, Math.min(SCALE_STEPS.length - 1, idx)), isEnabled);
+          }
         }
         if (changes.badgeTextEnabled && toggleBadge) {
           toggleBadge.checked = changes.badgeTextEnabled.newValue !== false;
