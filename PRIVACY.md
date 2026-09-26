@@ -1,6 +1,6 @@
 # Privacy Policy — Usage Limits Tracker for ChatGPT
 
-**Last updated:** 2026-09-14
+**Last updated:** 2026-09-26
 
 ## Overview
 
@@ -69,4 +69,5 @@ If this policy changes materially, the extension version number will be incremen
 
 ## Contact
 
-For questions or concerns, please open an issue in the project repository.
+For questions or concerns, please open an issue in the project repository at:
+https://github.com/kjegru/chatgpt-usage-extension/issues
