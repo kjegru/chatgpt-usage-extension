@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/**/*.test.js",
-    "check:syntax": "node --check background.js popup.js content.js utils.js data_schema.js"
+    "check:syntax": "node --check background.js popup.js content.js utils.js data_schema.js",
+    "build": "rm -f dist/chatgpt-usage-extension.zip && mkdir -p dist && zip -r dist/chatgpt-usage-extension.zip manifest.json background.js content.js content.css popup.html popup.js popup.css utils.js data_schema.js icons/"
   }
 }
