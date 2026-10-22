@@ -270,3 +270,25 @@ input:checked + .slider:before {
   text-align: center;
   color: var(--text-primary);
 }
+
+.action-btn {
+  background: var(--progress-track);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--row-hover-bg);
+  border-color: var(--text-secondary);
+}
+
+.action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
