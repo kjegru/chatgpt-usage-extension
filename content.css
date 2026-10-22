@@ -13,6 +13,7 @@
   opacity: 0.95;
   transition: opacity 0.2s ease, transform 0.2s ease;
   transform-origin: top right;
+  touch-action: none;
 }
 
 #chatgpt-usage-floating-widget:hover {
@@ -34,6 +35,28 @@
   padding: 12px 16px !important;
   backdrop-filter: blur(10px);
   transition: all 0.2s ease;
+  cursor: grab;
+}
+
+#chatgpt-usage-floating-widget.cgu-is-dragging {
+  transition: none !important;
+  cursor: grabbing !important;
+}
+
+#chatgpt-usage-floating-widget.cgu-is-dragging .cgu-card {
+  transition: none !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.18) !important;
+  cursor: grabbing !important;
+}
+
+#chatgpt-usage-floating-widget.cgu-is-dragging * {
+  cursor: grabbing !important;
+}
+
+body.cgu-dragging,
+body.cgu-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 
 /* Dark mode support matching ChatGPT */
@@ -43,6 +66,10 @@
     color: #ececec;
     border-color: rgba(255, 255, 255, 0.15);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  #chatgpt-usage-floating-widget.cgu-is-dragging .cgu-card {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45) !important;
   }
 }
 
@@ -54,18 +81,28 @@ body.dark #chatgpt-usage-floating-widget .cgu-card {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 
+html.dark #chatgpt-usage-floating-widget.cgu-is-dragging .cgu-card,
+body.dark #chatgpt-usage-floating-widget.cgu-is-dragging .cgu-card {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45) !important;
+}
+
 .cgu-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
-  cursor: pointer;
+  cursor: grab;
+}
+
+.cgu-header:active {
+  cursor: grabbing;
 }
 
 .cgu-title-group {
   display: flex;
   align-items: center;
   gap: 6px;
+  cursor: grab;
 }
 
 .cgu-status-dot {

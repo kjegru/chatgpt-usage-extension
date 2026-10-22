@@ -165,7 +165,7 @@ function updateScaleDisplay(idx, floatingEnabled = true) {
   }
 }
 
-const STORAGE_KEYS = ["usagePayload", "floatingWidgetEnabled", "badgeTextEnabled", "floatingWidgetScaleIndex", "lastError"];
+const STORAGE_KEYS = ["usagePayload", "floatingWidgetEnabled", "badgeTextEnabled", "floatingWidgetScaleIndex", "floatingWidgetPosition", "lastError"];
 
 function loadCachedData(callback) {
   chrome.storage.local.get(STORAGE_KEYS, (result) => {
@@ -188,6 +188,16 @@ function loadCachedData(callback) {
       scaleIndex = Math.max(0, Math.min(SCALE_STEPS.length - 1, result.floatingWidgetScaleIndex));
     }
     updateScaleDisplay(scaleIndex, floatingEnabled);
+
+    // Restore widget position reset button
+    const resetPosBtn = document.getElementById("reset-position-btn");
+    const posRow = document.getElementById("widget-position-row");
+    if (resetPosBtn) {
+      resetPosBtn.disabled = !floatingEnabled || !result.floatingWidgetPosition;
+    }
+    if (posRow) {
+      posRow.style.opacity = floatingEnabled ? "1" : "0.5";
+    }
 
     // Restore badge text toggle setting (default: true)
     const toggleBadge = document.getElementById("toggle-badge");
@@ -260,6 +270,15 @@ function init() {
     });
   }
 
+  const resetPosBtn = document.getElementById("reset-position-btn");
+  if (resetPosBtn) {
+    resetPosBtn.addEventListener("click", () => {
+      chrome.storage.local.remove("floatingWidgetPosition", () => {
+        resetPosBtn.disabled = true;
+      });
+    });
+  }
+
   if (chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName === "local") {
@@ -271,9 +290,17 @@ function init() {
           if (toggleFloating) {
             toggleFloating.checked = isEnabled;
           }
-          chrome.storage.local.get("floatingWidgetScaleIndex", (res) => {
+          chrome.storage.local.get(["floatingWidgetScaleIndex", "floatingWidgetPosition"], (res) => {
             const idx = res && typeof res.floatingWidgetScaleIndex === "number" ? res.floatingWidgetScaleIndex : DEFAULT_SCALE_INDEX;
             updateScaleDisplay(Math.max(0, Math.min(SCALE_STEPS.length - 1, idx)), isEnabled);
+            const resetBtn = document.getElementById("reset-position-btn");
+            const posRow = document.getElementById("widget-position-row");
+            if (posRow) {
+              posRow.style.opacity = isEnabled ? "1" : "0.5";
+            }
+            if (resetBtn) {
+              resetBtn.disabled = !isEnabled || !res?.floatingWidgetPosition;
+            }
           });
         }
         if (changes.floatingWidgetScaleIndex !== undefined) {
@@ -281,6 +308,13 @@ function init() {
           if (typeof idx === "number") {
             const isEnabled = toggleFloating ? toggleFloating.checked : true;
             updateScaleDisplay(Math.max(0, Math.min(SCALE_STEPS.length - 1, idx)), isEnabled);
+          }
+        }
+        if (changes.floatingWidgetPosition !== undefined) {
+          const resetBtn = document.getElementById("reset-position-btn");
+          if (resetBtn) {
+            const isEnabled = toggleFloating ? toggleFloating.checked : true;
+            resetBtn.disabled = !isEnabled || !changes.floatingWidgetPosition.newValue;
           }
         }
         if (changes.badgeTextEnabled && toggleBadge) {

@@ -38,6 +38,7 @@
   let widgetEl = null;
   let isMinimized = false;
   let cachedPayload = null;
+  let widgetPosition = null;
 
   function safeStorageSet(items) {
     try {
@@ -55,6 +56,156 @@
     } catch (_) {
       // Extension context invalidated or storage unavailable
     }
+  }
+
+  function applyPosition(pos) {
+    if (!widgetEl || !pos || typeof pos.left !== "number" || typeof pos.top !== "number") return;
+    widgetPosition = { left: Math.round(pos.left), top: Math.round(pos.top) };
+    widgetEl.style.transformOrigin = "top left";
+    widgetEl.style.right = "auto";
+    widgetEl.style.bottom = "auto";
+
+    const rect = widgetEl.getBoundingClientRect();
+    const maxLeft = Math.max(0, window.innerWidth - rect.width);
+    const maxTop = Math.max(0, window.innerHeight - rect.height);
+    const clampedLeft = Math.min(Math.max(0, widgetPosition.left), maxLeft);
+    const clampedTop = Math.min(Math.max(0, widgetPosition.top), maxTop);
+
+    widgetEl.style.left = `${clampedLeft}px`;
+    widgetEl.style.top = `${clampedTop}px`;
+  }
+
+  function resetPosition() {
+    widgetPosition = null;
+    if (!widgetEl) return;
+    widgetEl.style.left = "";
+    widgetEl.style.top = "";
+    widgetEl.style.right = "";
+    widgetEl.style.bottom = "";
+    widgetEl.style.transformOrigin = "";
+  }
+
+  function clampWidgetPosition() {
+    if (!widgetEl) return;
+    if (!widgetEl.style.left || !widgetEl.style.top) return;
+    const rect = widgetEl.getBoundingClientRect();
+    const maxLeft = Math.max(0, window.innerWidth - rect.width);
+    const maxTop = Math.max(0, window.innerHeight - rect.height);
+    const curLeft = parseFloat(widgetEl.style.left);
+    const curTop = parseFloat(widgetEl.style.top);
+    if (Number.isNaN(curLeft) || Number.isNaN(curTop)) return;
+
+    const clampedLeft = Math.min(Math.max(0, Math.round(curLeft)), maxLeft);
+    const clampedTop = Math.min(Math.max(0, Math.round(curTop)), maxTop);
+    if (clampedLeft !== curLeft || clampedTop !== curTop) {
+      widgetEl.style.left = `${clampedLeft}px`;
+      widgetEl.style.top = `${clampedTop}px`;
+      widgetPosition = { left: clampedLeft, top: clampedTop };
+      safeStorageSet({ floatingWidgetPosition: widgetPosition });
+    }
+  }
+
+  function setupDraggable(container) {
+    let isDragging = false;
+    let hasMoved = false;
+    let wasJustDragged = false;
+    let startX = 0;
+    let startY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+    let widgetWidth = 0;
+    let widgetHeight = 0;
+
+    // Suppress click events if the mouse was dragged
+    container.addEventListener(
+      "click",
+      (e) => {
+        if (wasJustDragged) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      },
+      true
+    );
+
+    function onPointerDown(e) {
+      if (e.button !== 0) return;
+      if (e.target.closest("button, .cgu-icon-btn, input, a")) return;
+
+      const rect = container.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+      widgetWidth = rect.width;
+      widgetHeight = rect.height;
+      hasMoved = false;
+      isDragging = true;
+
+      window.addEventListener("pointermove", onPointerMove, { passive: false });
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+      window.addEventListener("blur", onPointerUp);
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+
+      if (!hasMoved) {
+        if (Math.hypot(deltaX, deltaY) < 4) {
+          return;
+        }
+        hasMoved = true;
+        container.classList.add("cgu-is-dragging");
+        if (document.body) {
+          document.body.classList.add("cgu-dragging");
+        }
+        container.style.transformOrigin = "top left";
+        container.style.right = "auto";
+        container.style.bottom = "auto";
+      }
+
+      e.preventDefault();
+
+      const maxLeft = Math.max(0, window.innerWidth - widgetWidth);
+      const maxTop = Math.max(0, window.innerHeight - widgetHeight);
+      const nextLeft = Math.min(Math.max(0, Math.round(startLeft + deltaX)), maxLeft);
+      const nextTop = Math.min(Math.max(0, Math.round(startTop + deltaY)), maxTop);
+
+      container.style.left = `${nextLeft}px`;
+      container.style.top = `${nextTop}px`;
+    }
+
+    function onPointerUp() {
+      if (!isDragging) return;
+      isDragging = false;
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("blur", onPointerUp);
+
+      if (hasMoved) {
+        container.classList.remove("cgu-is-dragging");
+        if (document.body) {
+          document.body.classList.remove("cgu-dragging");
+        }
+        wasJustDragged = true;
+        setTimeout(() => {
+          wasJustDragged = false;
+        }, 80);
+
+        const finalLeft = parseFloat(container.style.left);
+        const finalTop = parseFloat(container.style.top);
+        if (!Number.isNaN(finalLeft) && !Number.isNaN(finalTop)) {
+          widgetPosition = { left: Math.round(finalLeft), top: Math.round(finalTop) };
+          safeStorageSet({ floatingWidgetPosition: widgetPosition });
+        }
+      }
+    }
+
+    container.addEventListener("pointerdown", onPointerDown);
   }
 
   function updateHeaderTitle() {
@@ -93,6 +244,9 @@
     }
     if (widgetEl) {
       widgetEl.classList.toggle("cgu-minimized", isMinimized);
+      if (widgetPosition || widgetEl.style.left) {
+        clampWidgetPosition();
+      }
     }
     updateHeaderTitle();
     safeStorageSet({ floatingWidgetMinimized: isMinimized });
@@ -129,6 +283,10 @@
   function applyScale() {
     if (!widgetEl) return;
     widgetEl.style.transform = `scale(${SCALE_STEPS[scaleIndex]})`;
+    if (widgetPosition || widgetEl.style.left) {
+      widgetEl.style.transformOrigin = "top left";
+      clampWidgetPosition();
+    }
     updateScaleButtons();
   }
 
@@ -282,6 +440,7 @@
     card.appendChild(header);
     card.appendChild(body);
     container.appendChild(card);
+    setupDraggable(container);
 
     const targetParent = document.body || document.documentElement;
     targetParent.appendChild(container);
@@ -387,11 +546,17 @@
 
   function init() {
     try {
+      if (typeof window !== "undefined") {
+        window.addEventListener("resize", clampWidgetPosition);
+      }
+    } catch (_) {}
+
+    try {
       if (typeof chrome === "undefined" || !chrome?.runtime?.id || !chrome?.storage?.local) {
         return;
       }
       chrome.storage.local.get(
-        ["usagePayload", "floatingWidgetEnabled", "floatingWidgetMinimized", "floatingWidgetScaleIndex"],
+        ["usagePayload", "floatingWidgetEnabled", "floatingWidgetMinimized", "floatingWidgetScaleIndex", "floatingWidgetPosition"],
         (res) => {
           if (chrome.runtime?.lastError || !res) return;
 
@@ -405,6 +570,10 @@
           if (res.floatingWidgetMinimized) {
             isMinimized = true;
             widgetEl.classList.add("cgu-minimized");
+          }
+
+          if (res.floatingWidgetPosition) {
+            applyPosition(res.floatingWidgetPosition);
           }
 
           const enabled = res.floatingWidgetEnabled !== false;
@@ -435,6 +604,9 @@
               isMinimized = !!changes.floatingWidgetMinimized.newValue;
               if (widgetEl) {
                 widgetEl.classList.toggle("cgu-minimized", isMinimized);
+                if (widgetPosition || widgetEl.style.left) {
+                  clampWidgetPosition();
+                }
               }
               updateHeaderTitle();
             }
@@ -443,6 +615,13 @@
               if (typeof idx === "number") {
                 scaleIndex = Math.max(0, Math.min(SCALE_STEPS.length - 1, idx));
                 applyScale();
+              }
+            }
+            if (changes.floatingWidgetPosition !== undefined) {
+              if (changes.floatingWidgetPosition.newValue) {
+                applyPosition(changes.floatingWidgetPosition.newValue);
+              } else {
+                resetPosition();
               }
             }
           }

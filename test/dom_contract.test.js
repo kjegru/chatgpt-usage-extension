@@ -106,3 +106,34 @@ test("content.js: toggleMinimize and updateHeaderTitle execute safely under mock
   assert.ok(toggleMinMatch, "toggleMinimize function must be found");
   assert.ok(!toggleMinMatch[1].includes("chrome.storage.local.set"), "toggleMinimize must not use raw unhandled chrome.storage.local.set");
 });
+
+test("content.js: draggable setup, position management, and storage keys are present", () => {
+  const contentJs = fs.readFileSync(path.join(ROOT, "content.js"), "utf8");
+  assert.ok(contentJs.includes("setupDraggable"), "content.js must define setupDraggable function");
+  assert.ok(contentJs.includes("applyPosition"), "content.js must define applyPosition function");
+  assert.ok(contentJs.includes("resetPosition"), "content.js must define resetPosition function");
+  assert.ok(contentJs.includes("clampWidgetPosition"), "content.js must define clampWidgetPosition function");
+  assert.ok(contentJs.includes("floatingWidgetPosition"), "content.js must reference floatingWidgetPosition");
+  assert.ok(
+    contentJs.includes("safeStorageSet({ floatingWidgetPosition: widgetPosition })"),
+    "content.js must save floatingWidgetPosition using safeStorageSet"
+  );
+});
+
+test("content.css: draggable cursor and active drag styles are defined", () => {
+  const contentCss = fs.readFileSync(path.join(ROOT, "content.css"), "utf8");
+  assert.ok(contentCss.includes("cursor: grab"), "content.css must define grab cursor");
+  assert.ok(contentCss.includes("cgu-is-dragging"), "content.css must define .cgu-is-dragging");
+  assert.ok(contentCss.includes("cgu-dragging"), "content.css must define .cgu-dragging on body");
+  assert.ok(contentCss.includes("touch-action: none"), "content.css must set touch-action: none");
+});
+
+test("popup.html & popup.js: widget position reset control is present and wired up", () => {
+  const popupHtml = fs.readFileSync(path.join(ROOT, "popup.html"), "utf8");
+  const popupJs = fs.readFileSync(path.join(ROOT, "popup.js"), "utf8");
+
+  assert.ok(popupHtml.includes('id="reset-position-btn"'), "popup.html must contain reset-position-btn");
+  assert.ok(popupHtml.includes('id="widget-position-row"'), "popup.html must contain widget-position-row");
+  assert.ok(popupJs.includes("floatingWidgetPosition"), "popup.js must reference floatingWidgetPosition");
+  assert.ok(popupJs.includes('remove("floatingWidgetPosition"'), "popup.js must be able to remove floatingWidgetPosition");
+});
